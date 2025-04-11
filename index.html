@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>전투기 슈팅 게임</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+            display: block;
+            margin: 0 auto;
+        }
+        #game-container {
+            text-align: center;
+            margin-top: 20px;
+        }
+        #score, #health {
+            font-size: 24px;
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="score">점수: 0</div>
+        <div id="health">체력: 100</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const ws = new WebSocket('ws://localhost:8081');
+
+        let gameState = {
+            player_x: 0,
+            player_y: 0,
+            player_health: 100,
+            score: 0,
+            bullets: [],
+            enemies: [],
+            powerups: [],
+            explosions: [],
+            game_over: false
+        };
+
+        // 이미지 로드
+        const playerImg = new Image();
+        playerImg.src = 'fighter.png';
+
+        // 웹소켓 이벤트 처리
+        ws.onmessage = function(event) {
+            gameState = JSON.parse(event.data);
+            updateUI();
+        };
+
+        function updateUI() {
+            // 캔버스 초기화
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 플레이어 그리기
+            if (!gameState.game_over) {
+                ctx.drawImage(playerImg, gameState.player_x, gameState.player_y);
+            }
+
+            // 총알 그리기
+            ctx.fillStyle = 'white';
+            gameState.bullets.forEach(bullet => {
+                ctx.fillRect(bullet.x, bullet.y, 4, 15);
+            });
+
+            // 적 그리기
+            ctx.fillStyle = 'red';
+            gameState.enemies.forEach(enemy => {
+                ctx.fillRect(enemy.x, enemy.y, 30, 30);
+            });
+
+            // 파워업 그리기
+            gameState.powerups.forEach(powerup => {
+                ctx.fillStyle = powerup.type === 'powerup' ? 'yellow' : 'blue';
+                ctx.fillRect(powerup.x, powerup.y, 20, 20);
+            });
+
+            // 폭발 효과 그리기
+            ctx.fillStyle = 'yellow';
+            gameState.explosions.forEach(explosion => {
+                ctx.beginPath();
+                ctx.arc(explosion.x, explosion.y, explosion.radius, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // UI 업데이트
+            document.getElementById('score').textContent = `점수: ${gameState.score}`;
+            document.getElementById('health').textContent = `체력: ${gameState.player_health}`;
+
+            // 게임 오버 메시지
+            if (gameState.game_over) {
+                ctx.fillStyle = 'white';
+                ctx.font = '36px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('게임 오버! R키를 눌러 재시작', canvas.width/2, canvas.height/2);
+            }
+        }
+
+        // 키보드 이벤트 처리
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+                ws.send(JSON.stringify({
+                    type: 'move',
+                    x: event.key === 'ArrowLeft' ? -1 : 1
+                }));
+            } else if (event.key === ' ') {
+                ws.send(JSON.stringify({type: 'shoot'}));
+            }
+        });
+
+        // 터치 이벤트 처리
+        canvas.addEventListener('touchstart', function(event) {
+            event.preventDefault();
+            const touch = event.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+
+            if (y > canvas.height * 0.8) {
+                ws.send(JSON.stringify({
+                    type: 'move',
+                    x: x < canvas.width/2 ? -1 : 1
+                }));
+            } else {
+                ws.send(JSON.stringify({type: 'shoot'}));
+            }
+        });
+    </script>
+</body>
+</html> 
